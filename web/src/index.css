@@ -228,6 +228,54 @@ main {
   gap: 1.25rem;
 }
 
+/* ===== Search bar ===== */
+.search-bar {
+  margin-bottom: 1rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.55rem 0.875rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9375rem;
+  background: #fff;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* ===== Tag filter chips ===== */
+.tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Chip dạng button (có thể bấm) */
+.tag-chip--btn {
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.tag-chip--btn:hover {
+  background: #dbeafe;
+}
+
+.tag-chip--active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #1d4ed8;
+}
+
 /* ===== Editor page ===== */
 .editor-form {
   background: #fff;
