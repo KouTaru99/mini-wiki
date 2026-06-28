@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import articlesRouter from './routes/articles.routes.js';
 import tagsRouter from './routes/tags.routes.js';
+import searchRouter from './routes/search.routes.js';
 
 const app = express();
 const port = process.env.PORT ?? 3000;
@@ -23,6 +24,7 @@ app.get('/health', (_req, res) => {
 // ── Business routes — Bước 3.3-3.5 ──────────────────────────────────────────
 app.use('/api/articles', articlesRouter);
 app.use('/api/tags', tagsRouter);
+app.use('/api/search', searchRouter);
 
 // ── Fallback handlers — đặt CUỐI, sau tất cả router ─────────────────────────
 app.use(notFound);
