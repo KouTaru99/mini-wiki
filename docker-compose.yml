@@ -1,0 +1,20 @@
+services:
+  # service api + web sẽ thêm ở Chặng 6
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: miniwiki
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dev -d miniwiki']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
