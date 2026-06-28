@@ -8,6 +8,7 @@ export default function Layout() {
           <Link to="/" className="logo">Mini-Wiki</Link>
           <nav>
             <Link to="/">Trang chủ</Link>
+            <Link to="/new">Viết bài</Link>
           </nav>
         </div>
       </header>

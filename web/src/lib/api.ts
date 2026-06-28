@@ -14,6 +14,29 @@ async function apiGet<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Shape input cho tạo/sửa bài viết
+export interface ArticleInput {
+  title: string;
+  content: string;
+  published_at: string | null;
+  tagIds: number[];
+}
+
+// Hàm gửi POST/PUT/DELETE — xử lý 204 No Content (trả undefined)
+async function apiSend<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 204) return undefined as T;
+  if (!res.ok) {
+    const b = await res.json().catch(() => null) as { error?: { message?: string } } | null;
+    throw new Error(b?.error?.message ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 // GET /api/articles?tag=&page=
 export function listArticles(params?: { tag?: string; page?: number }): Promise<Paginated<ArticleListItem>> {
   const qs = new URLSearchParams();
@@ -38,4 +61,19 @@ export function searchArticles(q: string, page?: number): Promise<Paginated<Arti
   const qs = new URLSearchParams({ q });
   if (page && page > 1) qs.set('page', String(page));
   return apiGet<Paginated<ArticleListItem>>(`/search?${qs.toString()}`);
+}
+
+// POST /api/articles
+export function createArticle(input: ArticleInput): Promise<Article> {
+  return apiSend<Article>('POST', '/articles', input);
+}
+
+// PUT /api/articles/:slug
+export function updateArticle(slug: string, input: Partial<ArticleInput>): Promise<Article> {
+  return apiSend<Article>('PUT', `/articles/${encodeURIComponent(slug)}`, input);
+}
+
+// DELETE /api/articles/:slug — 204 No Content
+export function deleteArticle(slug: string): Promise<void> {
+  return apiSend<void>('DELETE', `/articles/${encodeURIComponent(slug)}`);
 }
