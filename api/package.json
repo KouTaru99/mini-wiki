@@ -21,7 +21,10 @@
     "cors": "^2",
     "dotenv": "^16",
     "express": "^5",
-    "morgan": "^1"
+    "isomorphic-dompurify": "^2",
+    "marked": "^14",
+    "morgan": "^1",
+    "slugify": "^1"
   },
   "devDependencies": {
     "@types/cors": "^2",

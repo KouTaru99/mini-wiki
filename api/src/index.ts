@@ -4,6 +4,7 @@ import express from 'express';
 import morgan from 'morgan';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
+import articlesRouter from './routes/articles.routes.js';
 
 const app = express();
 const port = process.env.PORT ?? 3000;
@@ -18,7 +19,8 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-// routes articles/tags/search — Bước 3.3-3.5
+// ── Business routes — Bước 3.3-3.5 ──────────────────────────────────────────
+app.use('/api/articles', articlesRouter);
 
 // ── Fallback handlers — đặt CUỐI, sau tất cả router ─────────────────────────
 app.use(notFound);
