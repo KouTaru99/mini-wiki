@@ -1,0 +1,544 @@
+# OpenAPI 3.0 — Mini-Wiki v1
+# OpenAPI (còn gọi là Swagger): chuẩn mô tả REST API dạng machine-readable (YAML/JSON).
+# Hình thức hóa contract FE ↔ BE: endpoint nào tồn tại, gửi/nhận gì, lỗi ra sao.
+# Lợi ích: generate SDK tự động, validate request/response, hiển thị docs tương tác (Swagger UI).
+
+openapi: "3.0.3"
+
+info:
+  title: Mini-Wiki API
+  version: "1.0.0"
+  description: |
+    REST API công khai cho ứng dụng Mini-Wiki — CRUD bài viết, nhãn (tag) và tìm kiếm toàn văn.
+    Không có xác thực người dùng ở v1.
+
+servers:
+  - url: http://localhost:3000/api
+    description: Dev local
+  - url: https://{app}.railway.app/api
+    description: Production (Railway)
+    variables:
+      app:
+        default: mini-wiki
+        description: Tên app trên Railway
+
+tags:
+  - name: articles
+    description: Quản lý bài viết
+  - name: tags
+    description: Quản lý nhãn
+  - name: search
+    description: Tìm kiếm toàn văn
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── /articles ──────────────────────────────────────────────────────────────
+  /articles:
+    get:
+      tags: [articles]
+      summary: Lấy danh sách bài viết
+      description: Trả về danh sách bài viết đã đăng, sắp xếp theo `published_at` giảm dần. Hỗ trợ lọc theo tag và phân trang.
+      parameters:
+        - name: tag
+          in: query
+          description: Slug của tag để lọc (ví dụ `javascript`)
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Trang hiện tại (mặc định 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: Số bài mỗi trang (mặc định 20, tối đa 100)
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Danh sách bài viết (không bao gồm trường `content` để giảm payload)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ArticleListItem"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [articles]
+      summary: Tạo bài viết mới
+      description: Tạo bài viết mới. `slug` được tự động sinh từ `title` (hỗ trợ tiếng Việt). Có thể gắn tag ngay khi tạo qua `tagIds`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleCreateInput"
+            example:
+              title: "Học Git cơ bản"
+              content: "## Giới thiệu\nGit là hệ thống quản lý phiên bản phân tán..."
+              published_at: "2026-06-28T07:00:00.000Z"
+              tagIds: [2, 5]
+      responses:
+        "201":
+          description: Bài viết vừa tạo (đầy đủ trường)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── /articles/{slug} ───────────────────────────────────────────────────────
+  /articles/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        description: Slug URL-friendly của bài viết (ví dụ `hoc-git-co-ban`)
+        schema:
+          type: string
+
+    get:
+      tags: [articles]
+      summary: Lấy chi tiết bài viết
+      description: Trả về đầy đủ thông tin bài viết bao gồm `content` Markdown gốc và danh sách tag.
+      responses:
+        "200":
+          description: Chi tiết bài viết
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      tags: [articles]
+      summary: Cập nhật bài viết
+      description: |
+        Cập nhật một phần hoặc toàn bộ bài viết — chỉ gửi các trường muốn thay đổi.
+        Nếu `tagIds` được cung cấp, **toàn bộ danh sách tag hiện tại bị thay thế** (không merge).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleUpdateInput"
+      responses:
+        "200":
+          description: Bài viết sau khi cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [articles]
+      summary: Xóa bài viết
+      description: Xóa bài viết và tự động xóa tất cả liên kết `article_tags` (CASCADE).
+      responses:
+        "204":
+          description: Xóa thành công (body rỗng)
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── /tags ──────────────────────────────────────────────────────────────────
+  /tags:
+    get:
+      tags: [tags]
+      summary: Lấy danh sách tất cả tag
+      responses:
+        "200":
+          description: Mảng tag (không phân trang — thường < 100 tag)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [tags]
+      summary: Tạo tag mới
+      description: Tạo tag mới. `slug` tự động sinh từ `name`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  description: Tên hiển thị của tag
+                  example: "TypeScript"
+      responses:
+        "201":
+          description: Tag vừa tạo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── /tags/{id} ─────────────────────────────────────────────────────────────
+  /tags/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: ID số nguyên của tag
+        schema:
+          type: integer
+          minimum: 1
+
+    delete:
+      tags: [tags]
+      summary: Xóa tag
+      description: |
+        Xóa tag theo ID. Nếu tag còn gắn với ít nhất một bài viết, hệ thống từ chối
+        và trả về 409 Conflict (ON DELETE RESTRICT ở DB layer).
+      responses:
+        "204":
+          description: Xóa thành công (body rỗng)
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── /search ────────────────────────────────────────────────────────────────
+  /search:
+    get:
+      tags: [search]
+      summary: Tìm kiếm bài viết theo từ khóa
+      description: |
+        Full-Text Search trên `title` và `content` bằng PostgreSQL GIN index.
+        Dùng `to_tsvector('simple', ...)` — hỗ trợ tìm kiếm cơ bản tiếng Việt.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Từ khóa tìm kiếm (tối thiểu 1 ký tự)
+          schema:
+            type: string
+            minLength: 1
+          example: "git co ban"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Kết quả tìm kiếm (có phân trang, bao gồm `query` trong meta)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ArticleListItem"
+                  meta:
+                    allOf:
+                      - $ref: "#/components/schemas/PaginationMeta"
+                      - type: object
+                        properties:
+                          query:
+                            type: string
+                            description: Từ khóa đã tìm kiếm
+                            example: "git co ban"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPONENTS
+# ─────────────────────────────────────────────────────────────────────────────
+components:
+
+  schemas:
+
+    # ── Article (đầy đủ — dùng ở GET/PUT/POST response) ──────────────────────
+    Article:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 10
+        title:
+          type: string
+          maxLength: 255
+          example: "Học Git cơ bản"
+        slug:
+          type: string
+          maxLength: 255
+          example: "hoc-git-co-ban"
+        content:
+          type: string
+          description: Nội dung Markdown thuần
+          example: "## Giới thiệu\nGit là hệ thống quản lý phiên bản phân tán..."
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "NULL = bản nháp; có giá trị = đã đăng"
+          example: "2026-06-28T07:00:00.000Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-06-28T08:30:00.000Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-06-28T08:30:00.000Z"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagSummary"
+
+    # ── ArticleListItem (rút gọn — dùng ở danh sách & search, bỏ content) ───
+    ArticleListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 10
+        title:
+          type: string
+          example: "Học Git cơ bản"
+        slug:
+          type: string
+          example: "hoc-git-co-ban"
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-06-28T07:00:00.000Z"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagSummary"
+
+    # ── ArticleCreateInput ───────────────────────────────────────────────────
+    ArticleCreateInput:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "Học Git cơ bản"
+        content:
+          type: string
+          minLength: 1
+          description: Nội dung Markdown
+          example: "## Giới thiệu\nGit là hệ thống quản lý phiên bản phân tán..."
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Bỏ qua hoặc truyền null để lưu nháp"
+          example: "2026-06-28T07:00:00.000Z"
+        tagIds:
+          type: array
+          items:
+            type: integer
+          description: Mảng ID tag muốn gắn (có thể rỗng)
+          example: [2, 5]
+
+    # ── ArticleUpdateInput (tất cả trường tùy chọn) ──────────────────────────
+    ArticleUpdateInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "Học Git cơ bản (cập nhật)"
+        content:
+          type: string
+          minLength: 1
+          example: "## Nội dung mới..."
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-06-29T07:00:00.000Z"
+        tagIds:
+          type: array
+          items:
+            type: integer
+          description: Thay thế toàn bộ danh sách tag hiện tại (không merge)
+          example: [2, 7]
+
+    # ── Tag (đầy đủ — dùng ở GET /tags & POST /tags response) ───────────────
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          maxLength: 100
+          example: "Git"
+        slug:
+          type: string
+          maxLength: 100
+          example: "git"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-06-01T00:00:00.000Z"
+
+    # ── TagSummary (nhúng trong Article response) ─────────────────────────────
+    TagSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          example: "Git"
+        slug:
+          type: string
+          example: "git"
+
+    # ── PaginationMeta ────────────────────────────────────────────────────────
+    PaginationMeta:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Tổng số kết quả
+          example: 42
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+
+    # ── Error ─────────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Mã lỗi máy đọc được
+              example: "SLUG_CONFLICT"
+            message:
+              type: string
+              description: Mô tả lỗi người đọc được
+              example: "Slug 'hoc-git-co-ban' đã tồn tại."
+
+  # ── Reusable Responses ──────────────────────────────────────────────────────
+  responses:
+    BadRequest:
+      description: "400 — Request thiếu trường bắt buộc, sai kiểu, hoặc vi phạm validation"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: "MISSING_FIELD"
+              message: "Trường 'title' là bắt buộc."
+
+    NotFound:
+      description: "404 — Không tìm thấy resource theo slug/id đã cung cấp"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: "ARTICLE_NOT_FOUND"
+              message: "Không tìm thấy bài viết với slug 'hoc-git-co-ban'."
+
+    Conflict:
+      description: "409 — Slug hoặc tên tag trùng; hoặc xóa tag đang được sử dụng"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: "SLUG_CONFLICT"
+              message: "Slug 'hoc-git-co-ban' đã tồn tại."
+
+    InternalError:
+      description: "500 — Lỗi không mong muốn phía server (DB down, bug, v.v.)"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: "INTERNAL_ERROR"
+              message: "Lỗi nội bộ server. Vui lòng thử lại."
