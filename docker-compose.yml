@@ -1,5 +1,5 @@
 services:
-  # service api + web sẽ thêm ở Chặng 6
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     environment:
@@ -15,6 +15,48 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # ── Backend API ──────────────────────────────────────────────────────────────
+  api:
+    build: ./api
+    depends_on:
+      db:
+        # Chờ DB healthy (pg_isready OK) mới start api.
+        # Tránh api khởi động trước khi Postgres sẵn sàng nhận kết nối.
+        condition: service_healthy
+    environment:
+      # HOST = "db" (tên service), KHÔNG phải "localhost".
+      # Trong Docker network, các container nói chuyện qua tên service.
+      DATABASE_URL: postgresql://dev:dev@db:5432/miniwiki?schema=public
+      CORS_ORIGIN: http://localhost:8080
+      PORT: 3000
+    ports:
+      - '3000:3000'
+    healthcheck:
+      # node:22-slim không có curl/wget → dùng Node 22 native fetch
+      test:
+        - 'CMD-SHELL'
+        - >-
+          node -e "fetch('http://localhost:3000/health')
+          .then(r=>process.exit(r.ok?0:1))
+          .catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Frontend SPA ─────────────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      args:
+        # VITE_API_URL được Vite bake vào bundle lúc build (không đổi được lúc runtime).
+        # Browser gọi api qua localhost:3000 (expose ra host), không qua Docker network.
+        VITE_API_URL: http://localhost:3000/api
+    depends_on:
+      - api
+    ports:
+      - '8080:80'
 
 volumes:
   pgdata:
