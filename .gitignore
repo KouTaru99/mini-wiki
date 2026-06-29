@@ -12,6 +12,9 @@ out/
 # TypeScript
 *.tsbuildinfo
 
+# Test coverage output
+coverage/
+
 # Environment variables — KHÔNG commit file .env thật
 .env
 .env.local

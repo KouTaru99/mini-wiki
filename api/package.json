@@ -1,8 +1,11 @@
 {
   "name": "miniwiki-api",
   "version": "0.1.0",
-  "description": "Mini-Wiki backend — Node.js 20 + Express 5 + Prisma 5 + PostgreSQL 16",
+  "description": "Mini-Wiki backend — Node.js 22 + Express 5 + Prisma 5 + PostgreSQL 16",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "NODE_ENV=development tsx watch src/index.ts",
     "build": "tsc",
@@ -11,7 +14,10 @@
     "migrate:dev": "prisma migrate dev",
     "seed": "prisma db seed",
     "generate": "prisma generate",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -30,9 +36,13 @@
     "@types/cors": "^2",
     "@types/express": "^5",
     "@types/morgan": "^1",
-    "@types/node": "^20",
+    "@types/node": "^22.20.0",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.9",
     "prisma": "^5",
+    "supertest": "^7.2.2",
     "tsx": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   }
 }
