@@ -11,7 +11,7 @@
 
 ![Node 22](https://img.shields.io/badge/Node-22-339933?logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
-![Prisma](https://img.shields.io/badge/Prisma-5-2D3748?logo=prisma&logoColor=white)
+![Drizzle](https://img.shields.io/badge/Drizzle_ORM-latest-C5F74F?logo=drizzle&logoColor=black)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
@@ -83,14 +83,15 @@ bash scripts/smoke-test.sh
 
 ```
 mini-wiki/
-├── api/                    # Backend — Express 5 + TypeScript + Prisma
+├── api/                    # Backend — Express 5 + TypeScript + Drizzle ORM
 │   ├── src/
 │   │   ├── routes/         # Định nghĩa route (articles, tags, search, health)
 │   │   ├── controllers/    # Xử lý request/response
+│   │   ├── db/
+│   │   │   └── schema.ts   # Schema CSDL (nguồn sự thật)
 │   │   ├── middleware/      # Error handler, validation
 │   │   └── index.ts        # Entry point
-│   ├── prisma/
-│   │   └── schema.prisma   # Schema CSDL + migration
+│   ├── drizzle/             # Migration SQL sinh từ schema.ts
 │   └── Dockerfile
 ├── web/                    # Frontend — React 18 + Vite 6
 │   ├── src/
@@ -116,7 +117,7 @@ mini-wiki/
 |-------|-----|--------|----------------|
 | **1** | Ý tưởng & Yêu cầu | Thu thập yêu cầu người dùng, viết user stories, xác định scope v1 | `docs/requirements.md` |
 | **2** | Thiết kế & ADR | Thiết kế ERD, API contract, quyết định kiến trúc (ADR) | `docs/erd.md` · `docs/api.md` · `docs/adr/` · `docs/openapi.yaml` |
-| **3** | Backend + CSDL | Dựng Express API, schema Prisma, migration, CRUD + search + tag | `api/src/` · `prisma/schema.prisma` |
+| **3** | Backend + CSDL | Dựng Express API, schema Drizzle, migration, CRUD + search + tag | `api/src/` · `api/src/db/schema.ts` |
 | **4** | Frontend | Xây SPA React: danh sách, chi tiết, editor Markdown, tìm kiếm, lọc tag | `web/src/` |
 | **5** | Kiểm thử | Unit test (Vitest) + integration test (Supertest) + acceptance smoke-test | `api/src/__tests__/` · `scripts/smoke-test.sh` · PR template |
 | **6** | Đóng gói & Deploy | Dockerfile api/web + docker-compose + runner 1 lệnh + README | `docker-compose.yml` · `scripts/run-stack.sh` · tài liệu này |
@@ -125,7 +126,7 @@ mini-wiki/
 
 ## Đóng gói & "Deploy"
 
-"Deploy" trong scope này = **`docker compose up` chạy production-like local** — $0, không cần cloud, nhưng app chạy đúng như trên server thật (build optimized, Nginx serve SPA, API sau container network, Prisma migrate tự động).
+"Deploy" trong scope này = **`docker compose up` chạy production-like local** — $0, không cần cloud, nhưng app chạy đúng như trên server thật (build optimized, Nginx serve SPA, API sau container network, migrate tự động).
 
 Muốn đưa lên URL public: xem [`docs/deploy-cloud.md`](docs/deploy-cloud.md).  
 Danh sách mục cần kiểm tra trước khi lên production: xem [`docs/production-checklist.md`](docs/production-checklist.md).

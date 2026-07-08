@@ -60,8 +60,8 @@ cd api
 npm install
 
 # Chạy migration (tạo bảng) và seed dữ liệu mẫu
-npm run db:migrate     # prisma migrate deploy
-npm run db:seed        # nếu có script seed
+npm run migrate         # áp migration Drizzle
+npm run seed            # nạp dữ liệu mẫu
 ```
 
 > Nếu migrate lỗi "can't connect to database": đợi thêm 5 giây rồi thử lại (PostgreSQL trong Docker cần thời gian khởi động).
