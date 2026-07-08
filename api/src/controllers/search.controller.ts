@@ -1,10 +1,10 @@
 import type { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { sql } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler.js';
-import { prisma } from '../lib/prisma.js';
+import { db } from '../lib/db.js';
+import { loadTagsForArticles } from '../lib/articleTags.js';
 
 type RawArticleRow = { id: number; title: string; slug: string; published_at: Date | null };
-type TagSummary = { id: number; name: string; slug: string };
 
 // S1 — GET /api/search?q=&page=&limit=
 export async function search(req: Request, res: Response) {
@@ -15,42 +15,30 @@ export async function search(req: Request, res: Response) {
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
   const offset = (page - 1) * limit;
 
-  // Prisma.sql tham số hoá ${q}, ${limit}, ${offset} — KHÔNG nối chuỗi, tránh SQL injection.
+  // sql`` tham số hoá ${q}, ${limit}, ${offset} — KHÔNG nối chuỗi, tránh SQL injection.
   // GIN index trên to_tsvector('simple', title || ' ' || content) tăng tốc tra cứu FTS.
-  const [rows, countRows] = await Promise.all([
-    prisma.$queryRaw<RawArticleRow[]>(Prisma.sql`
+  const [rowsResult, countResult] = await Promise.all([
+    db.execute<RawArticleRow>(sql`
       SELECT id, title, slug, published_at
       FROM articles
       WHERE to_tsvector('simple', title || ' ' || content) @@ plainto_tsquery('simple', ${q})
       ORDER BY published_at DESC NULLS LAST, id DESC
       LIMIT ${limit} OFFSET ${offset}
     `),
-    prisma.$queryRaw<[{ count: bigint }]>(Prisma.sql`
+    db.execute<{ count: string }>(sql`
       SELECT COUNT(*) AS count
       FROM articles
       WHERE to_tsvector('simple', title || ' ' || content) @@ plainto_tsquery('simple', ${q})
     `),
   ]);
 
-  const total = Number(countRows[0]?.count ?? 0);
+  const rows = rowsResult.rows;
+  const total = Number(countResult.rows[0]?.count ?? 0);
 
   // Lấy tags theo batch — tránh N+1 query
-  const articleIds = rows.map(r => r.id);
-  const tagMap = new Map<number, TagSummary[]>();
+  const tagMap = await loadTagsForArticles(rows.map((r) => r.id));
 
-  if (articleIds.length > 0) {
-    const atRows = await prisma.articleTag.findMany({
-      where: { articleId: { in: articleIds } },
-      include: { tag: { select: { id: true, name: true, slug: true } } },
-    });
-    for (const at of atRows) {
-      const list = tagMap.get(at.articleId) ?? [];
-      list.push({ id: at.tag.id, name: at.tag.name, slug: at.tag.slug });
-      tagMap.set(at.articleId, list);
-    }
-  }
-
-  const data = rows.map(r => ({
+  const data = rows.map((r) => ({
     id: r.id,
     title: r.title,
     slug: r.slug,
