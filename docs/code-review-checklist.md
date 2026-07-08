@@ -15,7 +15,7 @@ Trong quy trình PTPM thực tế, code không bao giờ đi thẳng từ máy l
 
 ## Mục 2 — Bảo mật
 
-- [ ] **Tham số hoá query** — mọi truy vấn DB dùng Prisma ORM (tham số hoá tự động); không nối chuỗi SQL thô → chống SQL Injection.
+- [ ] **Tham số hoá query** — mọi truy vấn DB dùng Drizzle ORM (tham số hoá tự động); không nối chuỗi SQL thô → chống SQL Injection.
 - [ ] **Sanitize output HTML** — nội dung markdown được render qua `marked` + `DOMPurify` (hoặc tương đương) trước khi đưa vào DOM → chống XSS.
 - [ ] **Không lộ secret** — không có `API_KEY`, `DATABASE_URL`, password, token trong code hoặc diff; `.env` nằm trong `.gitignore`.
 - [ ] **Không expose stack trace** — response lỗi chỉ trả `{ error: { code, message } }`, không kèm `stack` hay đường dẫn file nội bộ.

@@ -57,8 +57,8 @@ export async function setup() {
   }
 
   // Chạy migration trên DB test
-  console.log('[global-setup] Chạy Prisma migrations trên miniwiki_test...');
-  execSync('npx prisma migrate deploy', {
+  console.log('[global-setup] Chạy Drizzle migrations trên miniwiki_test...');
+  execSync('npx tsx src/db/migrate.ts', {
     cwd: API_DIR,
     stdio: 'inherit',
     env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
