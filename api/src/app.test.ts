@@ -7,7 +7,7 @@ interface ErrorBody {
 }
 
 // Test cấp app: health check + các nhánh middleware (notFound, errorHandler khi
-// thao tác trên bản ghi không tồn tại → Prisma P2025 → 404).
+// thao tác trên bản ghi không tồn tại → controller tự kiểm tồn tại → 404).
 describe('App — middleware & health', () => {
   it('GET /health trả 200 status ok', async () => {
     const res = await request(app).get('/health');
@@ -21,14 +21,14 @@ describe('App — middleware & health', () => {
     expect((res.body as ErrorBody).error.code).toBe('ROUTE_NOT_FOUND');
   });
 
-  it('PUT bài viết không tồn tại → 404 (errorHandler map Prisma P2025)', async () => {
+  it('PUT bài viết không tồn tại → 404 (controller tự kiểm tồn tại)', async () => {
     const res = await request(app)
       .put('/api/articles/slug-khong-ton-tai')
       .send({ title: 'Mới' });
     expect(res.status).toBe(404);
   });
 
-  it('DELETE bài viết không tồn tại → 404 (errorHandler map Prisma P2025)', async () => {
+  it('DELETE bài viết không tồn tại → 404 (controller tự kiểm tồn tại)', async () => {
     const res = await request(app).delete('/api/articles/slug-khong-ton-tai');
     expect(res.status).toBe(404);
   });

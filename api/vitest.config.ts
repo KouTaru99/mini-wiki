@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import dotenv from 'dotenv';
 
-// Load .env.test trước để lấy DATABASE_URL truyền vào worker (prisma đọc env lúc import)
+// Load .env.test trước để lấy DATABASE_URL truyền vào worker (db client đọc env lúc import)
 dotenv.config({ path: '.env.test' });
 
 export default defineConfig({
@@ -19,7 +19,11 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**'],
-      exclude: ['src/index.ts', '**/*.test.ts', 'src/test/**'],
+      // src/db/**: schema (khai báo thuần) + script CLI độc lập (migrate/seed/reset,
+      // chạy qua tsx, không phải business logic đi qua HTTP layer) — tương đương
+      // cách prisma/schema.prisma + prisma/seed.ts trước đây nằm ngoài src/, nên
+      // chưa từng bị tính vào coverage.
+      exclude: ['src/index.ts', '**/*.test.ts', 'src/test/**', 'src/db/**'],
       thresholds: {
         lines: 70,
         functions: 70,
