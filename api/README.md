@@ -1,6 +1,6 @@
 # Mini-Wiki API
 
-Backend Node.js 20 + Express 5 + Prisma 5 cho dự án Mini-Wiki.
+Backend Node.js 20 + Express 5 + Drizzle ORM cho dự án Mini-Wiki.
 Chạy trên cổng **3000**, kết nối PostgreSQL 16 qua Docker.
 
 ---
@@ -55,7 +55,7 @@ npm install
 npm run migrate
 ```
 
-> `prisma migrate deploy`: áp dụng toàn bộ migration SQL vào DB — tạo bảng `articles`, `tags`, `article_tags` và GIN index cho full-text search.
+> Áp dụng toàn bộ migration SQL (`drizzle/*.sql`) vào DB — tạo bảng `articles`, `tags`, `article_tags` và GIN index cho full-text search.
 
 ---
 
@@ -66,7 +66,7 @@ npm run seed
 ```
 
 > Tạo 4 tag (JavaScript, Git, DevOps, PostgreSQL) và 3 bài viết mẫu tiếng Việt.
-> **Idempotent**: chạy nhiều lần không bị lỗi trùng (dùng `upsert`).
+> **Idempotent**: chạy nhiều lần không bị lỗi trùng (dùng `onConflictDoUpdate`).
 
 ---
 
@@ -94,11 +94,10 @@ curl http://localhost:3000/health
 | `npm run dev` | `tsx watch src/index.ts` | Phát triển — hot-reload |
 | `npm run build` | `tsc` | Build sang JS (xuất ra `dist/`) |
 | `npm start` | `node dist/index.js` | Chạy bản build production |
-| `npm run migrate` | `prisma migrate deploy` | Apply migration trên dev/prod |
-| `npm run migrate:dev` | `prisma migrate dev` | Tạo migration mới khi sửa schema |
-| `npm run seed` | `prisma db seed` | Nạp dữ liệu mẫu |
-| `npm run generate` | `prisma generate` | Tái sinh Prisma Client sau khi sửa schema |
-| `npm run db:reset` | `prisma migrate reset --force` | ⚠️ Xóa sạch DB và chạy lại từ đầu |
+| `npm run db:generate` | `drizzle-kit generate` | Sinh migration SQL từ thay đổi `src/db/schema.ts` |
+| `npm run migrate` | `tsx src/db/migrate.ts` | Áp migration còn thiếu — dùng trên dev/prod |
+| `npm run seed` | `tsx src/db/seed.ts` | Nạp dữ liệu mẫu |
+| `npm run db:reset` | xóa schema + `migrate` + `seed` | ⚠️ Xóa sạch DB và chạy lại từ đầu |
 
 ---
 
@@ -106,20 +105,25 @@ curl http://localhost:3000/health
 
 ```
 api/
-├── prisma/
-│   ├── migrations/       Migration SQL (đừng sửa tay)
-│   ├── schema.prisma     Định nghĩa model DB
-│   └── seed.ts           Script nạp dữ liệu mẫu
+├── drizzle/
+│   ├── meta/              Snapshot + journal (Drizzle Kit tự quản lý)
+│   └── *.sql              Migration SQL (đừng sửa tay)
+├── drizzle.config.ts       Cấu hình Drizzle Kit (schema path, DB credentials)
 ├── src/
-│   ├── controllers/      Business logic (Bước 3.3–3.5)
-│   ├── routes/           Express router (Bước 3.3–3.5)
+│   ├── controllers/        Business logic (Bước 3.3–3.5)
+│   ├── routes/             Express router (Bước 3.3–3.5)
+│   ├── db/
+│   │   ├── schema.ts        Định nghĩa bảng DB (nguồn sự thật)
+│   │   ├── migrate.ts        Áp migration (dùng trong Dockerfile CMD)
+│   │   ├── reset.ts          Xóa sạch schema public
+│   │   └── seed.ts           Script nạp dữ liệu mẫu
 │   ├── lib/
-│   │   └── prisma.ts     PrismaClient singleton
+│   │   └── db.ts            Drizzle client singleton (Pool + drizzle())
 │   ├── middleware/
 │   │   ├── errorHandler.ts  Map lỗi → HTTP response
 │   │   └── notFound.ts      Handler 404 route
-│   └── index.ts          Entry point, khởi động server
-├── .env.example          Biến môi trường mẫu
+│   └── index.ts            Entry point, khởi động server
+├── .env.example            Biến môi trường mẫu
 ├── package.json
 └── tsconfig.json
 ```

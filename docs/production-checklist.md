@@ -21,7 +21,7 @@
 
 | # | Hạng mục | Trạng thái | Ghi chú |
 |---|----------|------------|---------|
-| 6 | **Migration tự động khi khởi động** — `prisma migrate deploy` chạy trước khi app nhận request | ✅ Đã làm | `Dockerfile` của api chạy `prisma migrate deploy` trong entrypoint |
+| 6 | **Migration tự động khi khởi động** — áp migration Drizzle trước khi app nhận request | ✅ Đã làm | `Dockerfile` của api chạy `node dist/db/migrate.js` trong entrypoint |
 | 7 | **Healthcheck DB** — `pg_isready` trước khi api start | ✅ Đã làm | `docker-compose.yml` dùng `condition: service_healthy` cho db |
 | 8 | **Backup định kỳ** — `pg_dump` lưu file dump PostgreSQL | ❌ Chưa có | Scope v1 bỏ qua. Production thật: dùng `pg_dump` theo cron, hoặc managed DB (Render Postgres, Supabase) có sẵn backup. |
 

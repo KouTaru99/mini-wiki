@@ -55,4 +55,4 @@ Chọn **PostgreSQL 16** vì:
 
 ---
 
-> **Xem thêm:** [ADR-001](ADR-001-techstack.md) — Tech Stack tổng thể · [ADR-002](ADR-002-orm-prisma.md) — Chọn Prisma ORM
+> **Xem thêm:** [ADR-001](ADR-001-techstack.md) — Tech Stack tổng thể · [ADR-004](ADR-004-migrate-drizzle.md) — Chọn ORM (Drizzle, thay thế ADR-002)

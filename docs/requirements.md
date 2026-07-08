@@ -55,11 +55,11 @@
 |---|---|
 | **NFR-1** | **Hiệu năng (Performance):** API phản hồi dưới 300ms cho các thao tác CRUD đơn lẻ trên môi trường local (dataset < 1.000 bài viết). Truy vấn FTS dưới 500ms nhờ GIN index trên PostgreSQL. |
 | **NFR-2** | **Bảo mật — XSS:** Mọi nội dung Markdown từ người dùng phải được sanitize (làm sạch) trước khi render; không cho phép thẻ `<script>`, event handler HTML hay iframe từ nguồn không tin cậy. |
-| **NFR-3** | **Bảo mật — SQL Injection:** Toàn bộ truy vấn cơ sở dữ liệu đi qua Prisma ORM với parameterized query (câu lệnh SQL có tham số, không nối chuỗi trực tiếp), loại bỏ nguy cơ SQL Injection. |
+| **NFR-3** | **Bảo mật — SQL Injection:** Toàn bộ truy vấn cơ sở dữ liệu đi qua Drizzle ORM với parameterized query (câu lệnh SQL có tham số, không nối chuỗi trực tiếp), loại bỏ nguy cơ SQL Injection. |
 | **NFR-4** | **Bảo mật — CORS:** API chỉ chấp nhận request từ origin của front-end (cấu hình qua biến môi trường `CORS_ORIGIN`); từ chối các origin khác. |
 | **NFR-5** | **Không xác thực người dùng (v1):** v1 không có tính năng đăng ký / đăng nhập / phân quyền. Toàn bộ nội dung là công khai và có thể ghi bởi bất kỳ ai truy cập API. |
 | **NFR-6** | **Khả năng triển khai (Deployability):** Ứng dụng được container hóa bằng Docker; môi trường dev và production dùng chung `docker-compose.yml`, đảm bảo "chạy ở máy dev" = "chạy ở máy production" (dev/prod parity). |
-| **NFR-7** | **Khả năng bảo trì (Maintainability):** Code TypeScript đầy đủ kiểu (strict mode); Prisma migration được version hóa trong repo; không dùng `any` tùy tiện. |
+| **NFR-7** | **Khả năng bảo trì (Maintainability):** Code TypeScript đầy đủ kiểu (strict mode); migration Drizzle được version hóa trong repo; không dùng `any` tùy tiện. |
 | **NFR-8** | **Khả năng quan sát (Observability):** Mọi lỗi 5xx phải được log ra stderr với đủ context (endpoint, method, message); không nuốt lỗi thầm lặng. |
 
 ---

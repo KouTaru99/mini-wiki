@@ -1,7 +1,6 @@
-import { Prisma } from '@prisma/client';
 import type { NextFunction, Request, Response } from 'express';
 
-// AppError: lỗi có chủ ý từ business logic — controller ném ra thay vì next(err) Prisma thô
+// AppError: lỗi có chủ ý từ business logic — controller ném ra thay vì next(err) lỗi DB thô
 export class AppError extends Error {
   constructor(
     public readonly statusCode: number,
@@ -11,6 +10,33 @@ export class AppError extends Error {
     super(message);
     this.name = 'AppError';
   }
+}
+
+// Lỗi PostgreSQL (qua driver `pg`) có SQLSTATE `code` + tên `constraint` vi phạm.
+// Danh sách mã: https://www.postgresql.org/docs/current/errcodes-appendix.html
+interface PgError {
+  code: string;
+  constraint?: string;
+}
+
+function hasStringCode(err: unknown): err is PgError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    typeof (err as { code: unknown }).code === 'string'
+  );
+}
+
+// Drizzle bọc lỗi driver gốc vào DrizzleQueryError, lỗi pg thật nằm ở `.cause`
+// (theo chuẩn Error cause-chaining của Node) — bóc dần cho tới khi gặp lỗi có
+// `.code` dạng SQLSTATE, hoặc hết lớp để bóc.
+function extractPgError(err: unknown): PgError | undefined {
+  if (hasStringCode(err)) return err;
+  if (typeof err === 'object' && err !== null && 'cause' in err) {
+    return extractPgError((err as { cause: unknown }).cause);
+  }
+  return undefined;
 }
 
 // Express error handler — 4 tham số bắt buộc để Express nhận diện là error middleware
@@ -29,33 +55,24 @@ export function errorHandler(
     return;
   }
 
-  // Lỗi Prisma đã biết — map sang HTTP code + error code chuẩn API
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    if (err.code === 'P2002') {
-      // Unique constraint: phân biệt slug vs name qua meta.target
-      const target = (err.meta?.target as string[] | undefined) ?? [];
-      const code = target.some((f) => f.includes('slug'))
-        ? 'SLUG_CONFLICT'
-        : 'TAG_NAME_CONFLICT';
+  // Lỗi PostgreSQL đã biết — map sang HTTP code + error code chuẩn API
+  const pgError = extractPgError(err);
+  if (pgError) {
+    if (pgError.code === '23505') {
+      // unique_violation — phân biệt slug vs name qua tên constraint vi phạm
+      // (articles_slug_unique / tags_slug_unique / tags_name_unique — xem drizzle/0000_init.sql)
+      const targetCode = pgError.constraint?.includes('slug') ? 'SLUG_CONFLICT' : 'TAG_NAME_CONFLICT';
       res.status(409).json({
         error: {
-          code,
-          message: `Giá trị đã tồn tại: ${target.join(', ')}.`,
+          code: targetCode,
+          message: `Giá trị đã tồn tại (constraint: ${pgError.constraint ?? 'unknown'}).`,
         },
       });
       return;
     }
 
-    if (err.code === 'P2025') {
-      // Record not found (findUniqueOrThrow / updateOrThrow)
-      res.status(404).json({
-        error: { code: 'NOT_FOUND', message: 'Không tìm thấy bản ghi.' },
-      });
-      return;
-    }
-
-    if (err.code === 'P2003') {
-      // Foreign key constraint — xóa tag còn gắn bài viết
+    if (pgError.code === '23503') {
+      // foreign_key_violation — trường hợp dự phòng, controller đã kiểm trước khi xóa tag
       res.status(409).json({
         error: {
           code: 'TAG_IN_USE',

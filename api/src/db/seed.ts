@@ -1,20 +1,7 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
-
-// Chuyển tiêu đề tiếng Việt → slug ASCII (bỏ dấu + thay khoảng trắng = '-')
-function slugify(text: string): string {
-  return text
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // bỏ dấu tổ hợp
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
-}
+import { count, eq } from 'drizzle-orm';
+import { db, pool } from '../lib/db.js';
+import { articles, articleTags, tags } from './schema.js';
+import { toSlug } from '../lib/slug.js';
 
 // ── Dữ liệu mẫu ───────────────────────────────────────────────────────────────
 
@@ -129,59 +116,58 @@ nums.reduce((acc, n) => acc + n, 0); // 15
     tags: ['javascript'],
   },
   {
-    title: 'PostgreSQL và Prisma: Làm việc với cơ sở dữ liệu trong Node.js',
-    content: `## Prisma là gì?
+    title: 'PostgreSQL và Drizzle: Làm việc với cơ sở dữ liệu trong Node.js',
+    content: `## Drizzle là gì?
 
-**Prisma** là ORM (Object-Relational Mapper — ánh xạ đối tượng-quan hệ) thế hệ mới cho Node.js và TypeScript. Thay vì viết SQL thủ công, bạn định nghĩa schema bằng **Prisma Schema Language**, rồi Prisma tự sinh:
-- TypeScript types an toàn kiểu (type-safe)
-- Query builder thông minh với autocomplete
+**Drizzle** là ORM (Object-Relational Mapper — ánh xạ đối tượng-quan hệ) cho Node.js và TypeScript, theo triết lý "thin layer over SQL": schema và query đều viết bằng TypeScript thuần — không có bước sinh code (code generation) riêng, không có engine binary nào phải tải về.
 
 ## Định nghĩa Schema
 
-\`\`\`prisma
-model Article {
-  id          Int       @id @default(autoincrement())
-  title       String    @db.VarChar(255)
-  slug        String    @unique
-  content     String
-  publishedAt DateTime? @map("published_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+\`\`\`ts
+import { pgTable, serial, varchar, timestamp } from 'drizzle-orm/pg-core';
 
-  @@map("articles")
-}
+export const articles = pgTable('articles', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+});
 \`\`\`
 
-## Truy vấn với Prisma Client
+## Truy vấn với Drizzle
 
 \`\`\`ts
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { desc, eq, isNotNull } from 'drizzle-orm';
+import { Pool } from 'pg';
+import { articles } from './schema';
+
+const db = drizzle({ client: new Pool({ connectionString: process.env.DATABASE_URL }) });
 
 // Lấy tất cả bài viết đã đăng
-const articles = await prisma.article.findMany({
-  where: { publishedAt: { not: null } },
-  orderBy: { publishedAt: 'desc' },
-});
+const rows = await db
+  .select()
+  .from(articles)
+  .where(isNotNull(articles.publishedAt))
+  .orderBy(desc(articles.publishedAt));
 
-// Tìm theo slug — ném lỗi P2025 nếu không thấy
-const article = await prisma.article.findUniqueOrThrow({
-  where: { slug: 'bat-dau-voi-git' },
-  include: { tags: { include: { tag: true } } },
-});
+// Tìm theo slug
+const [article] = await db.select().from(articles).where(eq(articles.slug, 'bat-dau-voi-git'));
 
 // Tạo bài viết mới
-const newArticle = await prisma.article.create({
-  data: { title: 'Tiêu đề', slug: 'tieu-de', content: '...' },
-});
+const [newArticle] = await db
+  .insert(articles)
+  .values({ title: 'Tiêu đề', slug: 'tieu-de', content: '...' })
+  .returning();
 \`\`\`
 
 ## Full-Text Search với PostgreSQL GIN Index
 
-PostgreSQL hỗ trợ tìm kiếm toàn văn bản (full-text search) cực nhanh nhờ **GIN index**:
+Tính năng của **PostgreSQL**, không phụ thuộc ORM nào cả:
 
 \`\`\`sql
 -- Tạo GIN index trên cột tìm kiếm
-CREATE INDEX articles_fts_idx ON articles
+CREATE INDEX idx_articles_fts ON articles
   USING gin(to_tsvector('simple', title || ' ' || content));
 
 -- Truy vấn FTS
@@ -189,6 +175,10 @@ SELECT * FROM articles
 WHERE to_tsvector('simple', title || ' ' || content)
       @@ plainto_tsquery('simple', 'git co ban');
 \`\`\`
+
+## Vì sao đổi từ Prisma sang Drizzle?
+
+Dự án ban đầu chọn Prisma, nhưng đổi sang Drizzle sau khi phát hiện Prisma luôn cần tải **engine binary** từ 1 domain riêng (\`binaries.prisma.sh\`) — bị proxy mạng doanh nghiệp chặn ngay cả khi các nguồn quen thuộc (npm, Docker Hub, GitHub) vẫn thông bình thường. Drizzle không có bước tải binary nào — 100% TypeScript, loại bỏ hẳn lớp rủi ro đó. Xem ADR ghi lại quyết định này trong \`docs/adr/\`.
 `,
     publishedAt: new Date('2026-06-20T07:00:00.000Z'),
     tags: ['postgresql', 'javascript'],
@@ -203,43 +193,40 @@ async function main() {
   // 1. Upsert tags — slug là unique key
   const tagMap = new Map<TagSlug, number>();
   for (const tagData of TAGS) {
-    const tag = await prisma.tag.upsert({
-      where:  { slug: tagData.slug },
-      update: {},
-      create: tagData,
-    });
+    const [tag] = await db
+      .insert(tags)
+      .values(tagData)
+      .onConflictDoUpdate({ target: tags.slug, set: { name: tagData.name } })
+      .returning();
     tagMap.set(tagData.slug, tag.id);
     console.log(`  ✓ Tag: "${tag.name}" (id=${tag.id})`);
   }
 
   // 2. Upsert articles — slug sinh từ title
   for (const data of ARTICLES) {
-    const slug = slugify(data.title);
+    const slug = toSlug(data.title);
 
-    const article = await prisma.article.upsert({
-      where:  { slug },
-      update: {
-        title:       data.title,
-        content:     data.content,
-        publishedAt: data.publishedAt,
-      },
-      create: {
-        title:       data.title,
-        slug,
-        content:     data.content,
-        publishedAt: data.publishedAt,
-      },
-    });
+    const [article] = await db
+      .insert(articles)
+      .values({ title: data.title, slug, content: data.content, publishedAt: data.publishedAt })
+      .onConflictDoUpdate({
+        target: articles.slug,
+        set: {
+          title: data.title,
+          content: data.content,
+          publishedAt: data.publishedAt,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
 
     // Thay thế toàn bộ liên kết tag (xóa cũ → tạo mới) để idempotent
-    await prisma.articleTag.deleteMany({ where: { articleId: article.id } });
-    for (const tagSlug of data.tags) {
-      const tagId = tagMap.get(tagSlug);
-      if (tagId !== undefined) {
-        await prisma.articleTag.create({
-          data: { articleId: article.id, tagId },
-        });
-      }
+    await db.delete(articleTags).where(eq(articleTags.articleId, article.id));
+    const tagIds = data.tags
+      .map((tagSlug) => tagMap.get(tagSlug))
+      .filter((id): id is number => id !== undefined);
+    if (tagIds.length > 0) {
+      await db.insert(articleTags).values(tagIds.map((tagId) => ({ articleId: article.id, tagId })));
     }
 
     console.log(
@@ -248,9 +235,9 @@ async function main() {
   }
 
   // 3. Tổng kết
-  const [tagCount, articleCount] = await Promise.all([
-    prisma.tag.count(),
-    prisma.article.count(),
+  const [[{ tagCount }], [{ articleCount }]] = await Promise.all([
+    db.select({ tagCount: count() }).from(tags),
+    db.select({ articleCount: count() }).from(articles),
   ]);
   console.log(`\nSeed hoàn tất: ${tagCount} tag, ${articleCount} bài viết.`);
 }
@@ -260,4 +247,4 @@ main()
     console.error('Seed thất bại:', err);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => pool.end());

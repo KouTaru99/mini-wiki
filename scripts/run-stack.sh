@@ -69,7 +69,7 @@ echo ""
 
 # ── Bước 3: Chờ service api HEALTHY ──────────────────────────────────────────
 echo -e "${BOLD}[3/4] Chờ API healthy (tối đa 90 giây)...${RESET}"
-echo -e "${YELLOW}(API cần chờ DB sẵn sàng + chạy Prisma migrate deploy → có thể mất 20-40s)${RESET}"
+echo -e "${YELLOW}(API cần chờ DB sẵn sàng + chạy migration → có thể mất 20-40s)${RESET}"
 echo ""
 
 TIMEOUT=90   # giây tối đa chờ

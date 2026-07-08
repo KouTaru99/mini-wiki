@@ -2,7 +2,9 @@
 
 ## Trạng thái (Status)
 
-**Accepted** — 2026-06-28
+**⚠️ Superseded** — 2026-07-08, bởi [ADR-004](ADR-004-migrate-drizzle.md) (đổi sang Drizzle ORM: Prisma cần tải native binary từ domain riêng, bị proxy mạng doanh nghiệp chặn). Nội dung bên dưới giữ nguyên làm hồ sơ quyết định gốc, không còn phản ánh trạng thái hiện tại của dự án.
+
+~~Accepted — 2026-06-28~~
 
 ---
 
