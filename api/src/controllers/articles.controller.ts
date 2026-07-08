@@ -1,21 +1,16 @@
 import type { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler.js';
-import { prisma } from '../lib/prisma.js';
+import { db } from '../lib/db.js';
+import { articles, articleTags, tags } from '../db/schema.js';
+import { loadTagsForArticles, type TagSummary } from '../lib/articleTags.js';
 import { toSlug } from '../lib/slug.js';
 import { renderMarkdown } from '../lib/markdown.js';
 
-// include chuẩn để lấy tags lồng nhau cho mọi query Article
-const ARTICLE_INCLUDE = { tags: { include: { tag: true } } } as const;
-
-type ArticleWithTags = Prisma.ArticleGetPayload<{ include: typeof ARTICLE_INCLUDE }>;
-
-function mapTags(tags: ArticleWithTags['tags']) {
-  return tags.map(at => ({ id: at.tag.id, name: at.tag.name, slug: at.tag.slug }));
-}
+type ArticleRow = typeof articles.$inferSelect;
 
 // Format đầy đủ — dùng ở GET /:slug, POST, PUT (có content + content_html tuỳ chọn)
-function formatArticle(a: ArticleWithTags, contentHtml?: string) {
+function formatArticle(a: ArticleRow, tagList: TagSummary[], contentHtml?: string) {
   return {
     id: a.id,
     title: a.title,
@@ -25,18 +20,18 @@ function formatArticle(a: ArticleWithTags, contentHtml?: string) {
     published_at: a.publishedAt,
     created_at: a.createdAt,
     updated_at: a.updatedAt,
-    tags: mapTags(a.tags),
+    tags: tagList,
   };
 }
 
 // Format rút gọn — dùng ở GET / (danh sách, không có content để giảm payload)
-function formatListItem(a: ArticleWithTags) {
+function formatListItem(a: ArticleRow, tagList: TagSummary[]) {
   return {
     id: a.id,
     title: a.title,
     slug: a.slug,
     published_at: a.publishedAt,
-    tags: mapTags(a.tags),
+    tags: tagList,
   };
 }
 
@@ -46,34 +41,41 @@ export async function list(req: Request, res: Response) {
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
   const tagSlug = req.query.tag as string | undefined;
 
-  const where: Prisma.ArticleWhereInput = tagSlug
-    ? { tags: { some: { tag: { slug: tagSlug } } } }
-    : {};
+  const where = tagSlug
+    ? inArray(
+        articles.id,
+        db
+          .select({ id: articleTags.articleId })
+          .from(articleTags)
+          .innerJoin(tags, eq(articleTags.tagId, tags.id))
+          .where(eq(tags.slug, tagSlug)),
+      )
+    : undefined;
 
-  const [total, articles] = await Promise.all([
-    prisma.article.count({ where }),
-    prisma.article.findMany({
-      where,
-      orderBy: [
-        { publishedAt: { sort: 'desc', nulls: 'last' } },
-        { id: 'desc' },
-      ],
-      skip: (page - 1) * limit,
-      take: limit,
-      include: ARTICLE_INCLUDE,
-    }),
+  const [totalRow, rows] = await Promise.all([
+    db.select({ value: count() }).from(articles).where(where),
+    db
+      .select()
+      .from(articles)
+      .where(where)
+      // NULLS LAST không có helper riêng trong Drizzle — dùng sql`` cho đúng thứ tự gốc.
+      .orderBy(sql`${articles.publishedAt} DESC NULLS LAST`, desc(articles.id))
+      .limit(limit)
+      .offset((page - 1) * limit),
   ]);
 
-  res.json({ data: articles.map(formatListItem), meta: { total, page, limit } });
+  const tagMap = await loadTagsForArticles(rows.map((r) => r.id));
+
+  res.json({
+    data: rows.map((a) => formatListItem(a, tagMap.get(a.id) ?? [])),
+    meta: { total: totalRow[0]?.value ?? 0, page, limit },
+  });
 }
 
 // A3 — GET /api/articles/:slug
 export async function getBySlug(req: Request, res: Response) {
   const slug = String(req.params.slug);
-  const article = await prisma.article.findUnique({
-    where: { slug },
-    include: ARTICLE_INCLUDE,
-  });
+  const [article] = await db.select().from(articles).where(eq(articles.slug, slug)).limit(1);
   if (!article) {
     throw new AppError(
       404,
@@ -81,8 +83,9 @@ export async function getBySlug(req: Request, res: Response) {
       `Không tìm thấy bài viết với slug '${slug}'.`,
     );
   }
+  const tagMap = await loadTagsForArticles([article.id]);
   const contentHtml = await renderMarkdown(article.content);
-  res.json(formatArticle(article, contentHtml));
+  res.json(formatArticle(article, tagMap.get(article.id) ?? [], contentHtml));
 }
 
 // A2 — POST /api/articles
@@ -97,24 +100,31 @@ export async function create(req: Request, res: Response) {
   if (!title?.trim()) throw new AppError(400, 'MISSING_FIELD', "Trường 'title' là bắt buộc.");
   if (!content?.trim()) throw new AppError(400, 'MISSING_FIELD', "Trường 'content' là bắt buộc.");
 
-  const article = await prisma.article.create({
-    data: {
-      title,
-      slug: toSlug(title),
-      content,
-      publishedAt: published_at ? new Date(published_at) : null,
-      tags: tagIds?.length ? { create: tagIds.map(tagId => ({ tagId })) } : undefined,
-    },
-    include: ARTICLE_INCLUDE,
+  const article = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(articles)
+      .values({
+        title,
+        slug: toSlug(title),
+        content,
+        publishedAt: published_at ? new Date(published_at) : null,
+      })
+      .returning();
+
+    if (tagIds?.length) {
+      await tx.insert(articleTags).values(tagIds.map((tagId) => ({ articleId: inserted.id, tagId })));
+    }
+    return inserted;
   });
 
-  res.status(201).json(formatArticle(article));
+  const tagMap = await loadTagsForArticles([article.id]);
+  res.status(201).json(formatArticle(article, tagMap.get(article.id) ?? []));
 }
 
 // A4 — PUT /api/articles/:slug
 export async function update(req: Request, res: Response) {
   const slug = String(req.params.slug);
-  const existing = await prisma.article.findUnique({ where: { slug } });
+  const [existing] = await db.select().from(articles).where(eq(articles.slug, slug)).limit(1);
   if (!existing) {
     throw new AppError(
       404,
@@ -130,7 +140,7 @@ export async function update(req: Request, res: Response) {
     tagIds?: number[];
   };
 
-  const data: Prisma.ArticleUpdateInput = {};
+  const data: Partial<typeof articles.$inferInsert> = { updatedAt: new Date() };
   if (body.title !== undefined) {
     data.title = body.title;
     data.slug = toSlug(body.title);
@@ -140,24 +150,34 @@ export async function update(req: Request, res: Response) {
   if ('published_at' in body) {
     data.publishedAt = body.published_at ? new Date(body.published_at) : null;
   }
-  if (body.tagIds !== undefined) {
-    // Thay toàn bộ: xóa ArticleTag cũ rồi tạo lại
-    data.tags = { deleteMany: {}, create: body.tagIds.map(tagId => ({ tagId })) };
-  }
 
-  const article = await prisma.article.update({
-    where: { id: existing.id },
-    data,
-    include: ARTICLE_INCLUDE,
+  const article = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(articles)
+      .set(data)
+      .where(eq(articles.id, existing.id))
+      .returning();
+
+    if (body.tagIds !== undefined) {
+      // Thay toàn bộ: xóa ArticleTag cũ rồi tạo lại
+      await tx.delete(articleTags).where(eq(articleTags.articleId, existing.id));
+      if (body.tagIds.length > 0) {
+        await tx
+          .insert(articleTags)
+          .values(body.tagIds.map((tagId) => ({ articleId: existing.id, tagId })));
+      }
+    }
+    return updated;
   });
 
-  res.json(formatArticle(article));
+  const tagMap = await loadTagsForArticles([article.id]);
+  res.json(formatArticle(article, tagMap.get(article.id) ?? []));
 }
 
 // A5 — DELETE /api/articles/:slug
 export async function remove(req: Request, res: Response) {
   const slug = String(req.params.slug);
-  const existing = await prisma.article.findUnique({ where: { slug } });
+  const [existing] = await db.select().from(articles).where(eq(articles.slug, slug)).limit(1);
   if (!existing) {
     throw new AppError(
       404,
@@ -165,7 +185,7 @@ export async function remove(req: Request, res: Response) {
       `Không tìm thấy bài viết với slug '${slug}'.`,
     );
   }
-  // ArticleTag tự xóa cascade (onDelete: Cascade ở schema)
-  await prisma.article.delete({ where: { id: existing.id } });
+  // article_tags tự xóa cascade (onDelete: 'cascade' ở schema)
+  await db.delete(articles).where(eq(articles.id, existing.id));
   res.status(204).send();
 }
