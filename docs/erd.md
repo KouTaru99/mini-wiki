@@ -20,7 +20,7 @@ Bảng trung tâm của ứng dụng, lưu toàn bộ nội dung bài viết.
 | `content` | `TEXT` | NOT NULL | Nội dung dạng Markdown thuần |
 | `published_at` | `TIMESTAMPTZ` | NULLABLE | NULL = bản nháp; có giá trị = đã đăng |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL, DEFAULT NOW() | Tự động ghi khi tạo |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL | Tự động cập nhật khi sửa (Prisma @updatedAt) |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | Tự động cập nhật khi sửa (Drizzle `$onUpdate`) |
 
 **Lý do `slug` là UNIQUE:** slug dùng làm định danh trong URL (`/articles/:slug`). Hai bài cùng slug sẽ gây xung đột routing — hệ thống phải chặn ở tầng DB bằng UNIQUE constraint, không chỉ kiểm tra ở application.
 
