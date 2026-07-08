@@ -72,4 +72,4 @@ Lý do cốt lõi:
 
 ---
 
-> **Xem thêm:** [ADR-002](ADR-002-orm-prisma.md) — Chọn Prisma ORM · [ADR-003](ADR-003-postgresql.md) — Chọn PostgreSQL
+> **Xem thêm:** [ADR-004](ADR-004-migrate-drizzle.md) — Chọn ORM (Drizzle, thay thế ADR-002) · [ADR-003](ADR-003-postgresql.md) — Chọn PostgreSQL
